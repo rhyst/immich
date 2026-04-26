@@ -36,7 +36,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Compute tag
+      - name: Compute tags
         id: tag
         run: |
           if [[ -n "${{ inputs.tag }}" ]]; then
@@ -48,8 +48,22 @@ jobs:
               exit 1
             fi
           fi
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-          echo "Image tag: $TAG"
+          if [[ "$TAG" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+            MAJOR="v${BASH_REMATCH[1]}"
+            MINOR="v${BASH_REMATCH[1]}.${BASH_REMATCH[2]}"
+            REPO="ghcr.io/${{ github.repository_owner }}/immich-server"
+            {
+              echo "tags<<EOF"
+              echo "$REPO:$TAG"
+              echo "$REPO:$MINOR"
+              echo "$REPO:$MAJOR"
+              echo "$REPO:latest"
+              echo "EOF"
+            } >> "$GITHUB_OUTPUT"
+          else
+            echo "tags=ghcr.io/${{ github.repository_owner }}/immich-server:$TAG" >> "$GITHUB_OUTPUT"
+          fi
+          echo "Tag: $TAG"
 
       - name: Build & push immich-server
         uses: docker/build-push-action@v6
@@ -58,8 +72,6 @@ jobs:
           file: server/Dockerfile
           push: true
           platforms: linux/amd64
-          tags: |
-            ghcr.io/${{ github.repository_owner }}/immich-server:${{ steps.tag.outputs.tag }}
-            ghcr.io/${{ github.repository_owner }}/immich-server:latest
+          tags: ${{ steps.tag.outputs.tags }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
