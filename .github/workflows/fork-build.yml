@@ -3,12 +3,11 @@ name: Fork build
 on:
   push:
     branches: [rt/cross-album-share]
-    tags: ['rt-v*']
   workflow_dispatch:
     inputs:
       tag:
-        description: Image tag to publish
-        required: true
+        description: Override image tag (defaults to nearest upstream vX.Y.Z)
+        required: false
 
 permissions:
   contents: read
@@ -19,6 +18,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch upstream tags
+        run: |
+          git remote add upstream https://github.com/immich-app/immich.git || true
+          git fetch upstream --tags --no-recurse-submodules
 
       - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
@@ -34,12 +40,16 @@ jobs:
         id: tag
         run: |
           if [[ -n "${{ inputs.tag }}" ]]; then
-            echo "tag=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
-          elif [[ "${GITHUB_REF}" == refs/tags/* ]]; then
-            echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+            TAG="${{ inputs.tag }}"
           else
-            echo "tag=$(git describe --tags --always --dirty)" >> "$GITHUB_OUTPUT"
+            TAG=$(git describe --tags --abbrev=0 --match 'v[0-9]*.[0-9]*.[0-9]*' 2>/dev/null || true)
+            if [[ -z "$TAG" ]]; then
+              echo "No upstream semver tag reachable from HEAD" >&2
+              exit 1
+            fi
           fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Image tag: $TAG"
 
       - name: Build & push immich-server
         uses: docker/build-push-action@v6
