@@ -127,8 +127,9 @@ const checkOtherAccess = async (access: AccessRepository, request: OtherAccessRe
 
     case Permission.AssetShare: {
       const isOwner = await access.asset.checkOwnerAccess(auth.user.id, ids, false);
-      const isPartner = await access.asset.checkPartnerAccess(auth.user.id, setDifference(ids, isOwner));
-      return setUnion(isOwner, isPartner);
+      const isAlbum = await access.asset.checkAlbumAccess(auth.user.id, setDifference(ids, isOwner));
+      const isPartner = await access.asset.checkPartnerAccess(auth.user.id, setDifference(ids, isOwner, isAlbum));
+      return setUnion(isOwner, isAlbum, isPartner);
     }
 
     case Permission.AssetView: {
