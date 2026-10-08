@@ -7,7 +7,6 @@ on:
 
 permissions:
   contents: write
-  issues: write
 
 jobs:
   sync:
@@ -50,7 +49,7 @@ jobs:
         run: |
           set +e
           git checkout "${PATCH_BRANCH}"
-          git rebase "${{ steps.detect.outputs.latest }}"
+          git rebase --onto "${{ steps.detect.outputs.latest }}" "${{ steps.detect.outputs.current }}"
           rc=$?
           if [ $rc -ne 0 ]; then
             git rebase --abort || true
@@ -69,40 +68,8 @@ jobs:
           git config --local http.https://github.com/.extraheader "AUTHORIZATION: basic $AUTH"
           git push --force-with-lease origin "${PATCH_BRANCH}"
 
-      - name: Open issue on conflict
+      - name: Fail on conflict
         if: steps.rebase.outputs.ok == 'false'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const latest = '${{ steps.detect.outputs.latest }}';
-            const current = '${{ steps.detect.outputs.current }}';
-            const title = `Manual rebase needed: ${latest}`;
-            const existing = await github.rest.issues.listForRepo({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              state: 'open',
-              labels: 'fork-sync',
-            });
-            if (existing.data.some(i => i.title === title)) {
-              core.info('Issue already open, skipping.');
-              return;
-            }
-            await github.rest.issues.create({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              title,
-              labels: ['fork-sync'],
-              body: [
-                `The fork-sync workflow could not auto-rebase \`rt/cross-album-share\` from \`${current}\` onto \`${latest}\`.`,
-                '',
-                'To resolve manually:',
-                '```',
-                'git fetch upstream --tags',
-                'git checkout rt/cross-album-share',
-                `git rebase ${latest}`,
-                '# resolve conflicts, then:',
-                'git push --force-with-lease origin rt/cross-album-share',
-                `git tag rt-${latest}-1 && git push origin rt-${latest}-1`,
-                '```',
-              ].join('\n'),
-            });
+        run: |
+          echo "::error::Manual rebase needed: git rebase --onto ${{ steps.detect.outputs.latest }} ${{ steps.detect.outputs.current }} ${PATCH_BRANCH}"
+          exit 1
